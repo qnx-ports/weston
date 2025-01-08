@@ -101,7 +101,11 @@ weston_platform_get_egl_display(EGLenum platform, void *native_display,
 		return get_platform_display(platform,
 					    native_display, attrib_list);
 
+#if defined(__QNX__)
+	return EGL_NO_DISPLAY;
+#else
 	return eglGetDisplay((EGLNativeDisplayType) native_display);
+#endif
 }
 
 static inline EGLSurface

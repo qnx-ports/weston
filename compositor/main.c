@@ -5,6 +5,7 @@
  * Copyright © 2010-2011 Benjamin Franzke
  * Copyright © 2013 Jason Ekstrand
  * Copyright © 2017, 2018 General Electric Company
+ * Copyright (C) 2023 Blackberry Limited
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files (the
@@ -41,11 +42,15 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <sys/socket.h>
+#if !defined(__QNX__)
 #include <libinput.h>
 #include <libevdev/libevdev.h>
+#endif
 #include <linux/input.h>
 #include <sys/time.h>
+#if !defined(__QNX__)
 #include <linux/limits.h>
+#endif
 
 #include "weston.h"
 #include <libweston/libweston.h>
@@ -63,6 +68,9 @@
 #include <libweston/backend-rdp.h>
 #include <libweston/backend-x11.h>
 #include <libweston/backend-wayland.h>
+#if defined(__QNX__)
+#include <libweston/backend-qnx-screen.h>
+#endif
 #include <libweston/windowed-output-api.h>
 #include <libweston/weston-log.h>
 #include <libweston/remoting-plugin.h>
@@ -79,6 +87,14 @@ struct wet_output_config {
 	int32_t scale;
 	uint32_t transform;
 };
+
+#if defined(__QNX__)
+struct wet_qnx_screen_output_config {
+	int x;
+	int y;
+	int display;
+};
+#endif
 
 struct wet_compositor;
 struct wet_layoutput;
@@ -120,6 +136,9 @@ struct wet_compositor {
 	struct weston_compositor *compositor;
 	struct weston_config *config;
 	struct wet_output_config *parsed_options;
+#if defined(__QNX__)
+	struct wet_qnx_screen_output_config *qnx_screen_parsed_options;
+#endif
 	bool drm_use_current_mode;
 	struct wl_listener heads_changed_listener;
 	int (*simple_output_configure)(struct weston_output *output);
@@ -285,7 +304,10 @@ protocol_log_fn(void *user_data,
 				wl_fixed_to_double(message->arguments[i].f));
 			break;
 		case 's':
-			fprintf(fp, "\"%s\"", message->arguments[i].s);
+			if (message->arguments[i].s)
+				fprintf(fp, "\"%s\"", message->arguments[i].s);
+			else
+				fprintf(fp, "nil");
 			break;
 		case 'o':
 			if (message->arguments[i].o) {
@@ -470,6 +492,9 @@ weston_client_launch(struct weston_compositor *compositor,
 			   strerror(errno));
 		break;
 	}
+#if defined(__QNX__)
+	wl_client_set_credentials(client, pid, getuid(), getgid());
+#endif
 
 	custom_env_fini(&child_env);
 	free(fail_exec);
@@ -579,6 +604,30 @@ wet_init_parsed_options(struct weston_compositor *ec)
 	return config;
 }
 
+#if defined(__QNX__)
+static struct wet_qnx_screen_output_config *
+wet_init_qnx_screen_parsed_options(struct weston_compositor *ec)
+{
+	struct wet_compositor *compositor = to_wet_compositor(ec);
+	struct wet_qnx_screen_output_config *config;
+
+	config = zalloc(sizeof *config);
+
+	if (!config) {
+		perror("out of memory");
+		return NULL;
+	}
+
+	config->x = 0;
+	config->y = 0;
+	config->display = 0;
+
+	compositor->qnx_screen_parsed_options = config;
+
+	return config;
+}
+#endif
+
 WL_EXPORT struct weston_config *
 wet_get_config(struct weston_compositor *ec)
 {
@@ -658,6 +707,9 @@ usage(int error_code)
 #endif
 #if defined(BUILD_X11_COMPOSITOR)
 			"\t\t\t\tx11-backend.so\n"
+#endif
+#if defined(BUILD_QNX_SCREEN_COMPOSITOR)
+			"\t\t\t\tqnx-screen-backend.so\n"
 #endif
 		"  --shell=MODULE\tShell module, defaults to desktop-shell.so\n"
 		"  -S, --socket=NAME\tName of socket to listen on\n"
@@ -744,6 +796,22 @@ usage(int error_code)
 		"  --no-input\t\tDont create input devices\n\n");
 #endif
 
+#if defined(BUILD_QNX_SCREEN_COMPOSITOR)
+	fprintf(stderr,
+		"Options for qnx-screen-backend.so:\n\n"
+		"  --width=WIDTH\t\tWidth of QNX window\n"
+		"  --height=HEIGHT\tHeight of QNX window\n"
+		"  --scale=SCALE\t\tScale factor of output\n"
+		"  --fullscreen\t\tRun in fullscreen mode\n"
+		"  --use-pixman\t\tUse the pixman (CPU) renderer\n"
+		"  --output-count=COUNT\tCreate multiple outputs\n"
+		"  --no-input\t\tDont create input devices\n"
+		"  --position-x=X\tHorizontal position of QNX window\n"
+		"  --position-y=Y\tVertical position of QNX window\n"
+		"  --display=DISPLAY\tQNX screen display of QNX window\n\n"
+		"  --egl-display=DISPLAY\tEGL display (GPU) to use\n\n");
+#endif
+
 	exit(error_code);
 }
 
@@ -763,9 +831,11 @@ clock_name(clockid_t clk_id)
 	static const char *names[] = {
 		[CLOCK_REALTIME] =		"CLOCK_REALTIME",
 		[CLOCK_MONOTONIC] =		"CLOCK_MONOTONIC",
+#if !defined(__QNX__)
 		[CLOCK_MONOTONIC_RAW] =		"CLOCK_MONOTONIC_RAW",
 		[CLOCK_REALTIME_COARSE] =	"CLOCK_REALTIME_COARSE",
 		[CLOCK_MONOTONIC_COARSE] =	"CLOCK_MONOTONIC_COARSE",
+#endif
 #ifdef CLOCK_BOOTTIME
 		[CLOCK_BOOTTIME] =		"CLOCK_BOOTTIME",
 #endif
@@ -908,10 +978,14 @@ wet_load_module_entrypoint(const char *name, const char *entrypoint)
 	if (len >= sizeof path)
 		return NULL;
 
+#if defined(__QNX__)
+	{
+#else
 	module = dlopen(path, RTLD_NOW | RTLD_NOLOAD);
 	if (module) {
 		weston_log("Module '%s' already loaded\n", path);
 	} else {
+#endif
 		weston_log("Loading module '%s'\n", path);
 		module = dlopen(path, RTLD_NOW);
 		if (!module) {
@@ -1153,12 +1227,21 @@ weston_choose_default_backend(void)
 {
 	char *backend = NULL;
 
+#if defined(__QNX__)
+	if (getenv("WAYLAND_DISPLAY") || getenv("WAYLAND_SOCKET"))
+		backend = strdup("wayland-backend.so");
+	else if (access("/dev/screen/.config", R_OK) == 0)
+		backend = strdup("qnx-screen-backend.so");
+	else
+		weston_log("fatal: Weston does not have a native backend for QNX.  screen must be running.\n");
+#else
 	if (getenv("WAYLAND_DISPLAY") || getenv("WAYLAND_SOCKET"))
 		backend = strdup("wayland-backend.so");
 	else if (getenv("DISPLAY"))
 		backend = strdup("x11-backend.so");
 	else
 		backend = strdup(WESTON_NATIVE_BACKEND);
+#endif
 
 	return backend;
 }
@@ -1842,6 +1925,7 @@ wet_set_simple_head_configurator(struct weston_compositor *compositor,
 						&wet->heads_changed_listener);
 }
 
+#if !defined(__QNX__)
 static void
 configure_input_device_accel(struct weston_config_section *s,
 		struct libinput_device *device)
@@ -1949,11 +2033,13 @@ done:
 	free(method_string);
 	free(button_string);
 }
+#endif
 
 static void
 configure_input_device(struct weston_compositor *compositor,
 		       struct libinput_device *device)
 {
+#if !defined(__QNX__)
 	struct weston_config_section *s;
 	struct weston_config *config = wet_get_config(compositor);
 	bool has_enable_tap = false;
@@ -2042,6 +2128,7 @@ configure_input_device(struct weston_compositor *compositor,
 		configure_input_device_accel(s, device);
 
 	configure_input_device_scroll(s, device);
+#endif
 }
 
 static int
@@ -3379,6 +3466,191 @@ load_wayland_backend(struct weston_compositor *c,
 	return 0;
 }
 
+#if defined(__QNX__)
+static int
+qnx_screen_backend_output_configure(struct weston_output *output)
+{
+	struct wet_output_config defaults = {
+		.width = 1024,
+		.height = 600,
+		.scale = 1,
+		.transform = WL_OUTPUT_TRANSFORM_NORMAL
+	};
+	const struct weston_qnx_screen_output_api *api;
+	struct weston_config *wc = wet_get_config(output->compositor);
+	struct weston_config_section *section = NULL;
+	struct wet_compositor *compositor = to_wet_compositor(output->compositor);
+	struct wet_qnx_screen_output_config *qnx_screen_parsed_options = compositor->qnx_screen_parsed_options;
+	char *position = NULL;
+	char *display = NULL;
+	int x = 0, y = 0;
+	int display_id = 0;
+
+	api = weston_qnx_screen_output_get_api(output->compositor);
+	if (!api) {
+		weston_log("Cannot use weston_qnx_screen_output_api.\n");
+		return -1;
+	}
+
+	section = weston_config_get_section(wc, "output", "name", output->name);
+
+	if (section) {
+
+		weston_config_section_get_string(section,
+						 "display", &display, NULL);
+		if (display) {
+			if (sscanf(display, "%d", &display_id) != 1) {
+				weston_log("Invalid display for output %s. Using default.\n",
+					   output->name);
+				display_id = 0;
+			}
+		}
+		free(display);
+	}
+
+	if (qnx_screen_parsed_options->display != 0)
+		display_id = qnx_screen_parsed_options->display;
+
+	if (api->output_set_display(output, display_id) < 0) {
+		weston_log("Cannot configure output \"%s\" display using weston_qnx_screen_output_api.\n",
+			   output->name);
+		return -1;
+	}
+
+	if (section) {
+		weston_config_section_get_string(section,
+						 "position", &position, NULL);
+		if (position) {
+			if (sscanf(position, "%d,%d", &x, &y) != 2) {
+				weston_log("Invalid position for output %s. Using defaults.\n",
+					   output->name);
+				x = 0;
+				y = 0;
+			}
+		}
+		free(position);
+	}
+
+	if (qnx_screen_parsed_options->x != 0)
+		x = qnx_screen_parsed_options->x;
+
+	if (qnx_screen_parsed_options->y != 0)
+		y = qnx_screen_parsed_options->y;
+
+	if (api->output_set_position(output, x, y) < 0) {
+		weston_log("Cannot configure output \"%s\" position using weston_qnx_screen_output_api.\n",
+			   output->name);
+		return -1;
+	}
+
+	return wet_configure_windowed_output_from_config(output, &defaults);
+}
+
+static int
+load_qnx_screen_backend(struct weston_compositor *c,
+		 int *argc, char **argv, struct weston_config *wc)
+{
+	char *default_output;
+	const struct weston_windowed_output_api *api;
+	struct weston_qnx_screen_backend_config config = {{ 0, }};
+	struct weston_config_section *section;
+	int ret = 0;
+	int option_count = 1;
+	int output_count = 0;
+	char const *section_name;
+	int i;
+
+	struct wet_output_config *parsed_options = wet_init_parsed_options(c);
+	if (!parsed_options)
+		return -1;
+
+	struct wet_qnx_screen_output_config *qnx_screen_parsed_options = wet_init_qnx_screen_parsed_options(c);
+	if (!qnx_screen_parsed_options)
+		return -1;
+
+	section = weston_config_get_section(wc, "core", NULL, NULL);
+	weston_config_section_get_bool(section, "use-pixman", &config.use_pixman,
+				       false);
+
+	const struct weston_option options[] = {
+	       { WESTON_OPTION_INTEGER, "width", 0, &parsed_options->width },
+	       { WESTON_OPTION_INTEGER, "height", 0, &parsed_options->height },
+	       { WESTON_OPTION_INTEGER, "scale", 0, &parsed_options->scale },
+	       { WESTON_OPTION_BOOLEAN, "fullscreen", 'f', &config.fullscreen },
+	       { WESTON_OPTION_INTEGER, "output-count", 0, &option_count },
+	       { WESTON_OPTION_BOOLEAN, "no-input", 0, &config.no_input },
+	       { WESTON_OPTION_BOOLEAN, "use-pixman", 0, &config.use_pixman },
+	       { WESTON_OPTION_INTEGER, "position-x", 0, &qnx_screen_parsed_options->x },
+	       { WESTON_OPTION_INTEGER, "position-y", 0, &qnx_screen_parsed_options->y },
+	       { WESTON_OPTION_INTEGER, "display", 0, &qnx_screen_parsed_options->display },
+	       { WESTON_OPTION_INTEGER, "egl-display", 0, &config.egl_display },
+	};
+
+	parse_options(options, ARRAY_LENGTH(options), argc, argv);
+
+	config.base.struct_version = WESTON_QNX_SCREEN_BACKEND_CONFIG_VERSION;
+	config.base.struct_size = sizeof(struct weston_qnx_screen_backend_config);
+
+	wet_set_simple_head_configurator(c, qnx_screen_backend_output_configure);
+
+	/* load the actual backend and configure it */
+	ret = weston_compositor_load_backend(c, WESTON_BACKEND_QNX_SCREEN,
+					     &config.base);
+
+	if (ret < 0)
+		return ret;
+
+	api = weston_windowed_output_get_api(c);
+
+	if (!api) {
+		weston_log("Cannot use weston_windowed_output_api.\n");
+		return -1;
+	}
+
+	section = NULL;
+	while (weston_config_next_section(wc, &section, &section_name)) {
+		char *output_name;
+
+		if (output_count >= option_count)
+			break;
+
+		if (strcmp(section_name, "output") != 0) {
+			continue;
+		}
+
+		weston_config_section_get_string(section, "name", &output_name, NULL);
+		if (output_name == NULL || strncmp(output_name, "QS", 2) != 0) {
+			free(output_name);
+			continue;
+		}
+
+		if (api->create_head(c, output_name) < 0) {
+			free(output_name);
+			return -1;
+		}
+		free(output_name);
+
+		output_count++;
+	}
+
+	default_output = NULL;
+
+	for (i = output_count; i < option_count; i++) {
+		if (asprintf(&default_output, "screen%d", i) < 0) {
+			return -1;
+		}
+
+		if (api->create_head(c, default_output) < 0) {
+			free(default_output);
+			return -1;
+		}
+		free(default_output);
+	}
+
+	return 0;
+}
+#endif
+
 
 static int
 load_backend(struct weston_compositor *compositor, const char *backend,
@@ -3394,6 +3666,10 @@ load_backend(struct weston_compositor *compositor, const char *backend,
 		return load_x11_backend(compositor, argc, argv, config);
 	else if (strstr(backend, "wayland-backend.so"))
 		return load_wayland_backend(compositor, argc, argv, config);
+#if defined(__QNX__)
+	else if (strstr(backend, "qnx-screen-backend.so"))
+		return load_qnx_screen_backend(compositor, argc, argv, config);
+#endif
 
 	weston_log("Error: unknown backend \"%s\"\n", backend);
 	return -1;
@@ -3511,7 +3787,15 @@ weston_log_subscribe_to_scopes(struct weston_log_context *log_ctx,
 static void
 sigint_helper(int sig)
 {
+#if defined(__QNX__)
+	/* SIGUSR2 has been masked process-wide, signalfd() unblocks it for
+	 * it's own thread, but the raise() here will not make it out of this
+	 * thread. Need to send process-wide signal.
+	*/
+	kill(0, SIGUSR2);
+#else
 	raise(SIGUSR2);
+#endif
 }
 
 WL_EXPORT int
@@ -3554,6 +3838,37 @@ wet_main(int argc, char *argv[], const struct weston_testsuite_data *test_data)
 
 	bool wait_for_debugger = false;
 	struct wl_protocol_logger *protologger = NULL;
+
+#if defined(__QNX__)
+	// Before any other threads get created, block the signals that
+	// Weston will be handling.  The signalfd thread that handles
+	// the raw signals will unblock those signals for itself when
+	// Weston adds its signal handlers.
+	sigemptyset(&mask);
+	sigaddset(&mask, SIGTERM);
+	sigaddset(&mask, SIGCHLD);
+	sigaddset(&mask, SIGUSR1);
+	sigaddset(&mask, SIGUSR2);
+	pthread_sigmask(SIG_BLOCK, &mask, NULL);
+
+	// Due to the use of pipes in the QNX backend, and the in-process
+	// resource manager implementations of some Linux functionality on
+	// QNX, process receives a SIGPIPE when a child process, which was
+	// communicating with Weston (i.e. weston client), exits.
+	// This signal can be safely ignored.
+	action.sa_handler = SIG_IGN;
+	sigemptyset(&action.sa_mask);
+	action.sa_flags = 0;
+	sigaction(SIGPIPE, &action, NULL);
+
+	// memstreams are transient.  Pin the in-process memstream server so
+	// that it doesn't spin up/down for each memstream.  This could be
+	// done in a more targeted manner but it's not worth the extra code
+	// just to avoid having the server running when memstreams aren't
+	// being heavily used.
+	if (memstream_server_info_acquire(NULL, NULL) == -1)
+		goto out_memstream;
+#endif
 
 	const struct weston_option core_options[] = {
 		{ WESTON_OPTION_STRING, "backend", 'B', &backend },
@@ -3665,6 +3980,7 @@ wet_main(int argc, char *argv[], const struct weston_testsuite_data *test_data)
 	if (!signals[0] || !signals[1] || !signals[2])
 		goto out_signals;
 
+#if !defined(__QNX__)
 	/* Xwayland uses SIGUSR1 for communicating with weston. Since some
 	   weston plugins may create additional threads, set up any necessary
 	   signal blocking early so that these threads can inherit the settings
@@ -3672,6 +3988,7 @@ wet_main(int argc, char *argv[], const struct weston_testsuite_data *test_data)
 	sigemptyset(&mask);
 	sigaddset(&mask, SIGUSR1);
 	pthread_sigmask(SIG_BLOCK, &mask, NULL);
+#endif
 
 	if (load_configuration(&config, noconfig, config_file) < 0)
 		goto out_signals;
@@ -3696,6 +4013,10 @@ wet_main(int argc, char *argv[], const struct weston_testsuite_data *test_data)
 						 NULL);
 		if (!backend)
 			backend = weston_choose_default_backend();
+#if defined(__QNX__)
+		if (!backend)
+			goto out_signals;
+#endif
 	}
 
 	wet.compositor = weston_compositor_create(display, log_ctx, &wet, test_data);
@@ -3875,6 +4196,12 @@ out_display:
 	free(log);
 	free(log_scopes);
 	free(modules);
+
+#if defined(__QNX__)
+	memstream_server_info_release();
+
+out_memstream:
+#endif
 
 	return ret;
 }
