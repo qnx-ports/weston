@@ -5,7 +5,7 @@
 
 #pragma once
 
-#define BINDIR "/usr/bin"
+#define BINDIR "/data/home/qnxuser/bin"
 
 #define BUILD_HEADLESS_COMPOSITOR 1
 
@@ -13,7 +13,7 @@
 
 #define BUILD_WAYLAND_COMPOSITOR 1
 
-#define DATADIR "/usr/share"
+#define DATADIR "/system/share"
 
 #define EGL_NO_PLATFORM_SPECIFIC_TYPES 1
 
@@ -31,15 +31,15 @@
 
 #define HAVE_XKBCOMMON_COMPOSE 1
 
-#define LIBEXECDIR "/usr/libexec"
+#define LIBEXECDIR "/data/home/qnxuser/lib/libexec"
 
-#define LIBWESTON_MODULEDIR "/usr/lib/libweston"
+#define LIBWESTON_MODULEDIR "/data/home/qnxuser/lib/libweston"
 
 #define MAJOR_IN_SYSMACROS 1
 
 #define MESA_EGL_NO_X11_HEADERS 1
 
-#define MODULEDIR "/usr/lib/weston"
+#define MODULEDIR "/data/home/qnxuser/lib/weston"
 
 #define PACKAGE_BUGREPORT "https://gitlab.freedesktop.org/wayland/weston/issues/"
 

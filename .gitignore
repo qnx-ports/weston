@@ -12,3 +12,5 @@ TAGS
 
 build/
 !qnx/build
+qnx/build/*/*/nto
+qnx/build/*/nto

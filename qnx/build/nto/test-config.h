@@ -5,13 +5,30 @@
 
 #pragma once
 
-#define TESTSUITE_PLUGIN_PATH "weston/build/tests/test-plugin.so"
+#define TESTSUITE_PLUGIN_PATH "/data/home/qnxuser/lib/test-plugin.so"
 
-#define WESTON_DATA_DIR "weston/tests/../data"
+#define WESTON_DATA_DIR "/system/share/weston"
 
-#define WESTON_MODULE_MAP "color-lcms.so=weston/build/libweston/color-lcms/color-lcms.so;gl-renderer.so=weston/build/libweston/renderer-gl/gl-renderer.so;drm-backend.so=weston/build/libweston/backend-drm/drm-backend.so;headless-backend.so=weston/build/libweston/backend-headless/headless-backend.so;wayland-backend.so=weston/build/libweston/backend-wayland/wayland-backend.so;x11-backend.so=weston/build/libweston/backend-x11/x11-backend.so;xwayland.so=weston/build/xwayland/xwayland.so;screen-share.so=weston/build/compositor/screen-share.so;systemd-notify.so=weston/build/compositor/systemd-notify.so;desktop-shell.so=weston/build/desktop-shell/desktop-shell.so;ivi-shell.so=weston/build/ivi-shell/ivi-shell.so;hmi-controller.so=weston/build/ivi-shell/hmi-controller.so;kiosk-shell.so=weston/build/kiosk-shell/kiosk-shell.so;remoting-plugin.so=weston/build/remoting/remoting-plugin.so;weston-keyboard=weston/build/clients/weston-keyboard;weston-screenshooter=weston/build/clients/weston-screenshooter;weston-desktop-shell=weston/build/clients/weston-desktop-shell;weston-ivi-shell-user-interface=weston/build/clients/weston-ivi-shell-user-interface;weston-test-desktop-shell.so=weston/build/tests/weston-test-desktop-shell.so;test-ivi-layout.so=weston/build/tests/test-ivi-layout.so;"
+#define WESTON_MODULE_MAP \
+    "color-lcms.so=/data/home/qnxuser/lib/libweston/color-lcms.so;" \
+    "gl-renderer.so=/data/home/qnxuser/lib/libweston/gl-renderer.so;" \
+    "drm-backend.so=/data/home/qnxuser/lib/libweston/drm-backend.so;" \
+    "headless-backend.so=/data/home/qnxuser/lib/libweston/headless-backend.so;" \
+    "wayland-backend.so=/data/home/qnxuser/lib/libweston/wayland-backend.so;" \
+    "x11-backend.so=/data/home/qnxuser/lib/libweston/x11-backend.so;" \
+    "screen-share.so=/data/home/qnxuser/lib/weston/screen-share.so;" \
+    "desktop-shell.so=/data/home/qnxuser/lib/weston/desktop-shell.so;" \
+    "ivi-shell.so=/data/home/qnxuser/lib/weston/ivi-shell.so;" \
+    "hmi-controller.so=/data/home/qnxuser/lib/weston/hmi-controller.so;" \
+    "kiosk-shell.so=/data/home/qnxuser/lib/weston/kiosk-shell.so;" \
+    "weston-keyboard=/data/home/qnxuser/lib/libexec/weston-keyboard;" \
+    "weston-screenshooter=/data/home/qnxuser/lib/libexec/weston-screenshooter;" \
+    "weston-desktop-shell=/data/home/qnxuser/lib/libexec/weston-desktop-shell;" \
+    "weston-ivi-shell-user-interface=/data/home/qnxuser/lib/libexec/weston-ivi-shell-user-interface;" \
+    "weston-test-desktop-shell.so=/data/home/qnxuser/lib/weston-test-desktop-shell.so;" \
+    "test-ivi-layout.so=/data/home/qnxuser/lib/test-ivi-layout.so;"
 
-#define WESTON_TEST_REFERENCE_PATH "weston/tests/reference"
+#define WESTON_TEST_REFERENCE_PATH "/data/home/qnxuser/reference"
 
 #define WESTON_TEST_SKIP_IS_FAILURE 0
 
