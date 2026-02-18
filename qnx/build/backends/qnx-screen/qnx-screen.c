@@ -87,6 +87,7 @@ struct qnx_screen_backend {
 	struct wl_event_source		*screen_source;
 	int				 fullscreen;
 	int				 no_input;
+	int				 invert_scroll;
 	EGLNativeDisplayType		 egl_display;
 
 	/* We could map multi-pointer X to multiple wayland seats, but
@@ -1017,7 +1018,7 @@ qnx_screen_backend_deliver_scroll_event(struct qnx_screen_backend *b,
 		struct weston_pointer_axis_event weston_event;
 
 		weston_event.axis = WL_POINTER_AXIS_VERTICAL_SCROLL;
-		weston_event.value = -(vertical_scroll_state);
+		weston_event.value = b->invert_scroll ? -(vertical_scroll_state) : vertical_scroll_state;
 		weston_event.has_discrete = false;
 		weston_compositor_get_time(&time);
 
@@ -1353,6 +1354,7 @@ qnx_screen_backend_create(struct weston_compositor *compositor,
 	b->compositor = compositor;
 	b->fullscreen = config->fullscreen;
 	b->no_input = config->no_input;
+	b->invert_scroll = config->invert_scroll;
 	b->egl_display = config->egl_display;
 
 	wl_list_insert(&compositor->backend_list, &b->base.link);
@@ -1464,6 +1466,7 @@ err_free:
 static void
 config_init_to_defaults(struct weston_qnx_screen_backend_config *config)
 {
+	config->invert_scroll = false;
 }
 
 WL_EXPORT int
