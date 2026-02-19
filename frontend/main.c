@@ -4353,6 +4353,9 @@ load_qnx_screen_backend(struct weston_compositor *c,
 	weston_config_section_get_bool(section, "use-pixman", &force_pixman,
 				       false);
 
+	weston_config_section_get_bool(section, "invert-scroll", &config.invert_scroll,
+				       false);
+
 	const struct weston_option options[] = {
 	       { WESTON_OPTION_INTEGER, "width", 0, &parsed_options->width },
 	       { WESTON_OPTION_INTEGER, "height", 0, &parsed_options->height },
@@ -4361,6 +4364,7 @@ load_qnx_screen_backend(struct weston_compositor *c,
 	       { WESTON_OPTION_INTEGER, "output-count", 0, &option_count },
 	       { WESTON_OPTION_BOOLEAN, "no-input", 0, &config.no_input },
 	       { WESTON_OPTION_BOOLEAN, "use-pixman", 0, &force_pixman },
+	       { WESTON_OPTION_BOOLEAN, "invert-scroll", 0, &config.invert_scroll },
 	       { WESTON_OPTION_INTEGER, "position-x", 0, &qnx_screen_parsed_options->x },
 	       { WESTON_OPTION_INTEGER, "position-y", 0, &qnx_screen_parsed_options->y },
 	       { WESTON_OPTION_INTEGER, "display", 0, &qnx_screen_parsed_options->display },
